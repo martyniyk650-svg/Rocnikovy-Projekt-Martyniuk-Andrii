@@ -382,7 +382,7 @@ void ResizableArray<T, R>::rebuild(size_t newB) {
 
     // Znovu vložiť všetky hodnoty
     for (size_t i = 0; i < constructed; ++i) {
-        grow(buffer[i]);
+        push_back(buffer[i]);
         buffer[i].~T();
     }
     ::operator delete(buffer);
@@ -390,7 +390,7 @@ void ResizableArray<T, R>::rebuild(size_t newB) {
 
 template<typename T, size_t R>
 void ResizableArray<T, R>::copyFrom(const ResizableArray& other) {
-    // Bezpečná (hoci pomalšia) implementácia: skopíruj obsah cez grow(get(i)).
+    // Bezpečná (hoci pomalšia) implementácia: skopíruj obsah cez push_back(get(i)).
     // Táto cesta sa vyhne problémom s kopírovaním neinitializovaných prvkov
     // v poslednom B-bloku a zároveň automaticky zachová konzistenciu počítadiel.
 
@@ -406,7 +406,7 @@ void ResizableArray<T, R>::copyFrom(const ResizableArray& other) {
     initializeLevels(); // vymaže a pripraví štruktúru s novým B_
 
     for (size_t i = 0; i < other.N_; ++i) {
-        grow(other.get(i));
+        push_back(other.get(i));
     }
 }
 
@@ -421,7 +421,7 @@ ResizableArray<T, R>::ResizableArray(const ResizableArray& other)
     : B_(other.B_), N_(0), n0_(0), levels_(nullptr), n_(nullptr) {
     initializeLevels();
     for (size_t i = 0; i < other.N_; ++i) {
-        grow(other.get(i));
+        push_back(other.get(i));
     }
 }
 
@@ -457,7 +457,7 @@ ResizableArray<T, R>& ResizableArray<T, R>::operator=(const ResizableArray& othe
     }
 
     for (size_t i = 0; i < other.N_; ++i) {
-        grow(other.get(i));
+        push_back(other.get(i));
     }
     return *this;
 }
@@ -488,7 +488,7 @@ ResizableArray<T, R>& ResizableArray<T, R>::operator=(ResizableArray&& other) no
 // ==================== HLAVNÉ OPERÁCIE ====================
 
 template<typename T, size_t R>
-void ResizableArray<T, R>::grow(const T& item) {
+void ResizableArray<T, R>::push_back(const T& item) {
     // Dôležité: tieto kroky NESMÚ byť else-if reťazec.
     // Po combineBlocks() je posledný B-blok stále plný (n0_==B_), takže musíme vedieť
     // následne alokovať nový B-blok pred zápisom.
@@ -590,4 +590,20 @@ const T& ResizableArray<T, R>::get(size_t index) const {
 template<typename T, size_t R>
 void ResizableArray<T, R>::set(size_t index, const T& item) {
     get(index) = item;
+}
+
+// ==================== INE OPERÁCIE ====================
+template<typename T, size_t R>
+ResizableArray<T, R> ResizableArray<T, R>::sub_rarray(size_t from, size_t to) const {
+    if (from > to || to > N_) {
+        throw std::out_of_range("Invalid sub_rarray range");
+    }
+
+    ResizableArray<T, R> result;
+
+    for (size_t i = from; i < to; ++i) {
+        result.push_back(get(i));
+    }
+
+    return result;
 }

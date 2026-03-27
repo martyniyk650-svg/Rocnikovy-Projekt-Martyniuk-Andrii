@@ -4,9 +4,10 @@
 #include <cstddef>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 // Optimálne zmeniteľné pole - inteligentná alternatíva k std::vector
-// Používa menej pamäte (N + O(N^1/r) namiesto až 2N) ale za cenu trochu pomalších grow/shrink operácií
+// Používa menej pamäte (N + O(N^1/r) namiesto až 2N) ale za cenu trochu pomalších push_back/shrink operácií
 // Parameter R určuje trade-off: väčšie R = menej pamäte, ale pomalšie operácie
 template<typename T, size_t R = 3>
 class ResizableArray {
@@ -35,7 +36,7 @@ public:
 
     // Pridá prvok na koniec (ako push_back)
     // Trvá O(r) v priemere, niekedy môže trvať dlhšie keď sa musia presúvať bloky
-    void grow(const T& item);
+    void push_back(const T& item);
 
     // Odstráni posledný prvok (ako pop_back)
     // Hodí výnimku ak je pole prázdne
@@ -50,6 +51,38 @@ public:
 
     // Zmení hodnotu prvku na danej pozícii
     void set(size_t index, const T& item);
+
+    // ==================== INE OPERÁCIE ====================
+
+    // Pre iný ResizableArray
+    void push_back_all(const ResizableArray& other) {
+        for (size_t i = 0; i < other.length(); ++i) {
+            push_back(other.get(i));
+        }
+    }
+
+    // Pre obyčajné pole
+    void push_back_all(const T* arr, size_t size) {
+        for (size_t i = 0; i < size; ++i) {
+            push_back(arr[i]);
+        }
+    }
+    // Iny variant
+    template<size_t N>
+    void push_back_all(const T (&arr)[N]) {
+        for (size_t i = 0; i < N; ++i) {
+            push_back(arr[i]);
+        }
+    }
+
+    // Pre vector
+    void push_back_all(const std::vector<T>& vec) {
+        for (const auto& x : vec) {
+            push_back(x);
+        }
+    }
+
+    ResizableArray sub_rarray(size_t from, size_t to) const;
 
     // ==================== UŽITOČNÉ INFO ====================
 
@@ -69,7 +102,7 @@ public:
     T& operator[](size_t index) { return get(index); }
     const T& operator[](size_t index) const { return get(index); }
 
-private:
+//private:
     // ==================== VNÚTORNÉ ŠTRUKTÚRY ====================
 
     // Jeden blok pamäte, ktorý drží prvky
@@ -189,5 +222,4 @@ private:
     // Keď pole rastie, B sa zdvojnásobuje
     static constexpr size_t INITIAL_B = 4;
 };
-
 #endif // PROJEKT_RARRAY_H
