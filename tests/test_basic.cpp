@@ -96,7 +96,7 @@ TEST(PrivateMethodsTest, InitializeLevelsCreatesEmptyStructure) {
     TestArray arr;
 
     // Pre-fill to ensure initializeLevels truly resets a non-empty structure.
-    for (int i = 0; i < 25; ++i) arr.grow(i);
+    for (int i = 0; i < 25; ++i) arr.push_back(i);
     ASSERT_EQ(arr.length(), 25u) << "Precondition: array must be non-empty before init reset";
 
     arr.initializeLevels();
@@ -118,7 +118,7 @@ TEST(PrivateMethodsTest, InitializeLevelsCreatesEmptyStructure) {
     EXPECT_TRUE(arr.empty()) << "After initializeLevels, array must be empty";
     EXPECT_EQ(arr.length(), 0u) << "After initializeLevels, length must be 0";
 
-    arr.grow(123);
+    arr.push_back(123);
     EXPECT_EQ(arr.length(), 1u) << "Array must be reusable after initializeLevels";
     EXPECT_EQ(arr.get(0), 123) << "Inserted element must be accessible";
 }
@@ -137,7 +137,7 @@ TEST(PrivateMethodsTest, CleanupLevelsFreesAllMemory) {
 
     // Fill to allocate multiple blocks (not just one).
     for (int i = 0; i < 200; i++)
-        arr.grow(i);
+        arr.push_back(i);
     ASSERT_EQ(arr.length(), 200u) << "Precondition: array must contain data before cleanup";
 
     // Now cleanup everything.
@@ -156,7 +156,7 @@ TEST(PrivateMethodsTest, CleanupLevelsFreesAllMemory) {
     EXPECT_NO_THROW(arr.cleanupLevels()) << "cleanupLevels() should be safe to call multiple times";
 
     // Reusability after cleanup
-    for (int i = 0; i < 10; ++i) arr.grow(1000 + i);
+    for (int i = 0; i < 10; ++i) arr.push_back(1000 + i);
     EXPECT_EQ(arr.length(), 10u) << "Array must be reusable after cleanupLevels()";
     EXPECT_EQ(arr.get(0), 1000);
     EXPECT_EQ(arr.get(9), 1009);
@@ -175,7 +175,7 @@ TEST(PrivateMethodsTest, LocateItemReturnsCorrectLevelAndOffset) {
 
     // Fill enough elements to span multiple B-blocks and likely higher structures.
     for (int i = 0; i < 100; i++)
-        arr.grow(i);
+        arr.push_back(i);
     ASSERT_EQ(arr.length(), 100u);
 
     // Basic correctness: get(index) must match inserted value.
@@ -216,7 +216,7 @@ TEST(PrivateMethodsTest, LocateItemReturnsCorrectLevelAndOffset) {
 //
 // combineBlocks() sa spustí keď je úroveň plná (2B blokov).
 // Skombinuje B blokov do jedného väčšieho.
-// Toto testujeme nepriamo — cez grow().
+// Toto testujeme nepriamo — cez push_back().
 //
 
 TEST(PrivateMethodsTest, CombineBlocksProducesLargerBlocks) {
@@ -226,24 +226,24 @@ TEST(PrivateMethodsTest, CombineBlocksProducesLargerBlocks) {
     // Keep original “small fill” but extend to actually reach the PDF combine boundary for R=3:
     // combine triggers when n1==2B and n0==B, which corresponds to N == 2*B*B elements.
     for (size_t i = 0; i < B * 4; i++)
-        arr.grow(int(i));
+        arr.push_back(int(i));
 
-    EXPECT_EQ(arr.length(), B * 4) << "Basic growth should work for small counts";
+    EXPECT_EQ(arr.length(), B * 4) << "Basic push_backth should work for small counts";
     EXPECT_EQ(arr.get(0), 0);
     EXPECT_EQ(arr.get(B), int(B));
     EXPECT_EQ(arr.get(B * 3 - 1), int(B * 3 - 1));
 
-    // Extended: grow up to combine boundary and then add one more element.
+    // Extended: push_back up to combine boundary and then add one more element.
     // This is the most crash-prone edge case in buggy implementations (OOB after combine).
     const size_t target = 2 * B * B;
     for (size_t i = arr.length(); i < target; ++i)
-        arr.grow(int(i));
+        arr.push_back(int(i));
 
     ASSERT_EQ(arr.length(), target) << "We must reach the combine trigger boundary";
 
     // Add one more element to force “combine + append” path to be safe.
-    arr.grow(123456);
-    EXPECT_EQ(arr.length(), target + 1) << "After grow beyond boundary, length must increase by 1";
+    arr.push_back(123456);
+    EXPECT_EQ(arr.length(), target + 1) << "After push_back beyond boundary, length must increase by 1";
 
     // Data integrity: prefix must be preserved, last must be the new value.
     EXPECT_EQ(arr.get(0), 0) << "First element must remain correct after combine";
@@ -252,7 +252,7 @@ TEST(PrivateMethodsTest, CombineBlocksProducesLargerBlocks) {
 
     // Spot-check a couple of internal fields if exposed (helps detect counter corruption)
     EXPECT_LE(arr.n0_, B) << "n0 must never exceed B";
-    EXPECT_GE(arr.n_[1], 1u) << "After growth, level 1 must contain at least one block";
+    EXPECT_GE(arr.n_[1], 1u) << "After push_backth, level 1 must contain at least one block";
 }
 
 // =======================================================================
@@ -268,7 +268,7 @@ TEST(PrivateMethodsTest, SplitBlocksCreatesSmallerBlocks) {
 
     // Use a larger fill to ensure we likely create higher-level blocks.
     for (int i = 0; i < 300; i++)
-        arr.grow(i);
+        arr.push_back(i);
     ASSERT_EQ(arr.length(), 300u);
 
     // Shrink a lot to force internal restructuring and potential split paths.
@@ -293,8 +293,8 @@ TEST(PrivateMethodsTest, SplitBlocksCreatesSmallerBlocks) {
         << "shrink() on empty array must throw";
 
     // Reusability after reaching empty via shrinks
-    arr.grow(777);
-    arr.grow(888);
+    arr.push_back(777);
+    arr.push_back(888);
     EXPECT_EQ(arr.length(), 2u);
     EXPECT_EQ(arr.get(0), 777);
     EXPECT_EQ(arr.get(1), 888);
@@ -312,7 +312,7 @@ TEST(PrivateMethodsTest, RebuildChangesBlockSizeAndKeepsData) {
     TestArray arr;
 
     for (int i = 0; i < 30; i++)
-        arr.grow(i);
+        arr.push_back(i);
 
     size_t oldB = arr.getParameterB();
     size_t newB = oldB * 2;
@@ -325,10 +325,10 @@ TEST(PrivateMethodsTest, RebuildChangesBlockSizeAndKeepsData) {
     for (int i = 0; i < 30; i++)
         EXPECT_EQ(arr.get(i), i) << "All values must remain intact after rebuild";
 
-    // Expanded: verify rebuild doesn't break future operations (grow/shrink)
-    arr.grow(999);
+    // Expanded: verify rebuild doesn't break future operations (push_back/shrink)
+    arr.push_back(999);
     EXPECT_EQ(arr.length(), 31u);
-    EXPECT_EQ(arr.get(30), 999) << "After rebuild, grow() must still append correctly";
+    EXPECT_EQ(arr.get(30), 999) << "After rebuild, push_back() must still append correctly";
 
     arr.shrink();
     EXPECT_EQ(arr.length(), 30u) << "shrink() after rebuild must remove last element";
@@ -370,15 +370,15 @@ TEST(PublicMethodsTest, ConstructorCreatesEmptyArray) {
 
 
 // =======================================================================
-//  grow() — pridá prvok na koniec
+//  push_back() — pridá prvok na koniec
 // =======================================================================
 
-TEST(PublicMethodsTest, GrowAddsElementsCorrectly) {
+TEST(PublicMethodsTest, push_backAddsElementsCorrectly) {
     TestArray arr;
 
-    arr.grow(10);
-    arr.grow(20);
-    arr.grow(30);
+    arr.push_back(10);
+    arr.push_back(20);
+    arr.push_back(30);
 
     EXPECT_EQ(arr.length(), 3u) << "Length must reflect number of inserted items";
     EXPECT_EQ(arr.get(0), 10);
@@ -386,9 +386,9 @@ TEST(PublicMethodsTest, GrowAddsElementsCorrectly) {
     EXPECT_EQ(arr.get(2), 30);
 
     // Expanded: diverse valid inputs (duplicates, negatives, zero)
-    arr.grow(0);
-    arr.grow(-5);
-    arr.grow(20); // duplicate
+    arr.push_back(0);
+    arr.push_back(-5);
+    arr.push_back(20); // duplicate
     EXPECT_EQ(arr.length(), 6u);
 
     EXPECT_EQ(arr.get(3), 0) << "Zero value must be stored correctly";
@@ -396,8 +396,8 @@ TEST(PublicMethodsTest, GrowAddsElementsCorrectly) {
     EXPECT_EQ(arr.get(5), 20) << "Duplicate values must be stored correctly";
 
     // Expanded: larger sequence to stress multiple blocks
-    for (int i = 0; i < 200; ++i) arr.grow(1000 + i);
-    EXPECT_EQ(arr.length(), 206u) << "Large grow sequence must not lose elements";
+    for (int i = 0; i < 200; ++i) arr.push_back(1000 + i);
+    EXPECT_EQ(arr.length(), 206u) << "Large push_back sequence must not lose elements";
     EXPECT_EQ(arr.get(205), 1199) << "Last element must match the last appended value";
 }
 
@@ -408,8 +408,8 @@ TEST(PublicMethodsTest, GrowAddsElementsCorrectly) {
 TEST(PublicMethodsTest, ShrinkRemovesLastElement) {
     TestArray arr;
 
-    arr.grow(5);
-    arr.grow(10);
+    arr.push_back(5);
+    arr.push_back(10);
 
     arr.shrink();
 
@@ -422,7 +422,7 @@ TEST(PublicMethodsTest, ShrinkRemovesLastElement) {
     EXPECT_EQ(arr.length(), 0u);
 
     // Reusability after becoming empty via shrinks
-    arr.grow(77);
+    arr.push_back(77);
     EXPECT_FALSE(arr.empty());
     EXPECT_EQ(arr.length(), 1u);
     EXPECT_EQ(arr.get(0), 77);
@@ -433,7 +433,7 @@ TEST(PublicMethodsTest, ShrinkThrowsWhenEmpty) {
     EXPECT_THROW(arr.shrink(), std::out_of_range) << "shrink() on empty must throw";
 
     // Expanded: after some operations, empty again must still throw
-    arr.grow(1);
+    arr.push_back(1);
     arr.shrink();
     EXPECT_TRUE(arr.empty());
     EXPECT_THROW(arr.shrink(), std::out_of_range) << "Repeated shrink() on empty must throw consistently";
@@ -447,22 +447,22 @@ TEST(PublicMethodsTest, ShrinkThrowsWhenEmpty) {
 TEST(PublicMethodsTest, GetReturnsCorrectValue) {
     TestArray arr;
 
-    arr.grow(7);
-    arr.grow(14);
+    arr.push_back(7);
+    arr.push_back(14);
 
     EXPECT_EQ(arr.get(0), 7);
     EXPECT_EQ(arr.get(1), 14);
 
-    // Expanded: boundary reads after larger growth
-    for (int i = 0; i < 100; ++i) arr.grow(100 + i);
-    EXPECT_EQ(arr.get(0), 7) << "Old prefix must remain intact after further growth";
+    // Expanded: boundary reads after larger push_backth
+    for (int i = 0; i < 100; ++i) arr.push_back(100 + i);
+    EXPECT_EQ(arr.get(0), 7) << "Old prefix must remain intact after further push_backth";
     EXPECT_EQ(arr.get(arr.length() - 1), 199) << "Last element must be correct";
     EXPECT_EQ(arr.get(2), 100) << "Elements after initial inserts must be correct";
 }
 
 TEST(PublicMethodsTest, GetThrowsOnInvalidIndex) {
     TestArray arr;
-    arr.grow(5);
+    arr.push_back(5);
 
     EXPECT_THROW(arr.get(10), std::out_of_range);
     EXPECT_THROW(arr.get(1), std::out_of_range);
@@ -479,8 +479,8 @@ TEST(PublicMethodsTest, GetThrowsOnInvalidIndex) {
 TEST(PublicMethodsTest, SetChangesValueCorrectly) {
     TestArray arr;
 
-    arr.grow(50);
-    arr.grow(60);
+    arr.push_back(50);
+    arr.push_back(60);
 
     arr.set(0, 777);
     arr.set(1, 888);
@@ -489,7 +489,7 @@ TEST(PublicMethodsTest, SetChangesValueCorrectly) {
     EXPECT_EQ(arr.get(1), 888);
 
     // Expanded: set on larger structure, check boundaries
-    for (int i = 0; i < 100; ++i) arr.grow(i);
+    for (int i = 0; i < 100; ++i) arr.push_back(i);
     arr.set(0, -1);
     arr.set(arr.length() - 1, 9999);
 
@@ -499,7 +499,7 @@ TEST(PublicMethodsTest, SetChangesValueCorrectly) {
 
 TEST(PublicMethodsTest, SetThrowsOnInvalidIndex) {
     TestArray arr;
-    arr.grow(1);
+    arr.push_back(1);
 
     EXPECT_THROW(arr.set(5, 111), std::out_of_range);
 
@@ -519,8 +519,8 @@ TEST(PublicMethodsTest, SetThrowsOnInvalidIndex) {
 TEST(PublicMethodsTest, OperatorBracketReturnsReference) {
     TestArray arr;
 
-    arr.grow(3);
-    arr.grow(6);
+    arr.push_back(3);
+    arr.push_back(6);
 
     EXPECT_EQ(arr[0], 3);
     EXPECT_EQ(arr[1], 6);
@@ -547,7 +547,7 @@ TEST(PublicMethodsTest, LengthReturnsCorrectValue) {
     TestArray arr;
 
     for (int i = 0; i < 10; i++)
-        arr.grow(i);
+        arr.push_back(i);
 
     EXPECT_EQ(arr.length(), 10u);
 
@@ -557,9 +557,9 @@ TEST(PublicMethodsTest, LengthReturnsCorrectValue) {
     arr.shrink();
     EXPECT_EQ(arr.length(), 8u) << "Repeated shrink must decrease length correctly";
 
-    // Expanded: length after additional grows
-    arr.grow(100);
-    arr.grow(200);
+    // Expanded: length after additional push_backs
+    arr.push_back(100);
+    arr.push_back(200);
     EXPECT_EQ(arr.length(), 10u) << "After adding 2 elements, length must reflect it correctly";
 }
 
@@ -572,7 +572,7 @@ TEST(PublicMethodsTest, EmptyReturnsCorrectState) {
 
     EXPECT_TRUE(arr.empty());
 
-    arr.grow(1);
+    arr.push_back(1);
     EXPECT_FALSE(arr.empty());
 
     // Expanded: after shrink to empty, empty() must return true again
@@ -587,11 +587,11 @@ TEST(PublicMethodsTest, EmptyReturnsCorrectState) {
 
 TEST(PublicMethodsTest, CopyConstructorCreatesIndependentCopy) {
     TestArray arr;
-    arr.grow(5);
-    arr.grow(10);
+    arr.push_back(5);
+    arr.push_back(10);
 
     // Expanded: make it larger to ensure multiple blocks/counters are copied correctly
-    for (int i = 0; i < 200; ++i) arr.grow(1000 + i);
+    for (int i = 0; i < 200; ++i) arr.push_back(1000 + i);
 
     TestArray copy(arr);
 
@@ -622,15 +622,15 @@ TEST(PublicMethodsTest, CopyConstructorCreatesIndependentCopy) {
 
 TEST(PublicMethodsTest, CopyAssignmentCreatesIndependentCopy) {
     TestArray arr;
-    arr.grow(1);
-    arr.grow(2);
+    arr.push_back(1);
+    arr.push_back(2);
 
     // Expanded: bigger source to catch shallow-copy issues
-    for (int i = 0; i < 150; ++i) arr.grow(500 + i);
+    for (int i = 0; i < 150; ++i) arr.push_back(500 + i);
 
     TestArray copy;
     // Give copy some prior content to ensure assignment replaces previous state
-    for (int i = 0; i < 50; ++i) copy.grow(-100 - i);
+    for (int i = 0; i < 50; ++i) copy.push_back(-100 - i);
 
     copy = arr;
 
@@ -661,7 +661,7 @@ TEST(PublicMethodsTest, CopyAssignmentCreatesIndependentCopy) {
 
 TEST(PublicMethodsTest, MoveConstructorTransfersOwnership) {
     TestArray arr;
-    for (int i = 0; i < 200; ++i) arr.grow(i);
+    for (int i = 0; i < 200; ++i) arr.push_back(i);
 
     TestArray moved(std::move(arr));
 
@@ -682,11 +682,11 @@ TEST(PublicMethodsTest, MoveConstructorTransfersOwnership) {
 
 TEST(PublicMethodsTest, MoveAssignmentTransfersOwnership) {
     TestArray arr;
-    for (int i = 0; i < 120; ++i) arr.grow(1000 + i);
+    for (int i = 0; i < 120; ++i) arr.push_back(1000 + i);
 
     TestArray moved;
     // Give destination some existing content to ensure it gets replaced safely.
-    for (int i = 0; i < 50; ++i) moved.grow(-i);
+    for (int i = 0; i < 50; ++i) moved.push_back(-i);
 
     moved = std::move(arr);
 
@@ -700,7 +700,118 @@ TEST(PublicMethodsTest, MoveAssignmentTransfersOwnership) {
     EXPECT_THROW(arr.get(0), std::out_of_range) << "Moved-from must not allow access";
 
     // Expanded: destination still usable after move assignment
-    moved.grow(777);
+    moved.push_back(777);
     EXPECT_EQ(moved.get(moved.length() - 1), 777) << "Moved-to must remain usable after move assignment";
 }
 
+// =======================================================================
+//  push_back_all()
+// =======================================================================
+
+TEST(PublicMethodsTest, PushBackAllVectorWorksCorrectly) {
+    TestArray arr;
+    std::vector<int> v = {1, 2, 3, 4, 5};
+
+    arr.push_back_all(v);
+
+    ASSERT_EQ(arr.length(), 5u);
+    for (size_t i = 0; i < v.size(); ++i) {
+        EXPECT_EQ(arr.get(i), v[i]);
+    }
+}
+
+TEST(PublicMethodsTest, PushBackAllArrayWorksCorrectly) {
+    TestArray arr;
+    int a[] = {10, 20, 30};
+
+    arr.push_back_all(a);
+
+    ASSERT_EQ(arr.length(), 3u);
+    EXPECT_EQ(arr.get(0), 10);
+    EXPECT_EQ(arr.get(1), 20);
+    EXPECT_EQ(arr.get(2), 30);
+}
+
+TEST(PublicMethodsTest, PushBackAllResizableArrayWorksCorrectly) {
+    TestArray src;
+    for (int i = 0; i < 5; ++i) src.push_back(i);
+
+    TestArray dst;
+    dst.push_back_all(src);
+
+    ASSERT_EQ(dst.length(), 5u);
+    for (size_t i = 0; i < 5; ++i) {
+        EXPECT_EQ(dst.get(i), static_cast<int>(i));
+    }
+}
+
+TEST(PublicMethodsTest, PushBackAllAppendsToExistingData) {
+    TestArray arr;
+    arr.push_back(100);
+
+    std::vector<int> v = {1, 2, 3};
+    arr.push_back_all(v);
+
+    ASSERT_EQ(arr.length(), 4u);
+    EXPECT_EQ(arr.get(0), 100);
+    EXPECT_EQ(arr.get(1), 1);
+    EXPECT_EQ(arr.get(2), 2);
+    EXPECT_EQ(arr.get(3), 3);
+}
+
+// =======================================================================
+//  sub_rarray()
+// =======================================================================
+
+TEST(PublicMethodsTest, SubRarrayBasicWorksCorrectly) {
+    TestArray arr;
+    for (int i = 0; i < 10; ++i) arr.push_back(i);
+
+    auto sub = arr.sub_rarray(2, 6);
+
+    ASSERT_EQ(sub.length(), 4u);
+    EXPECT_EQ(sub.get(0), 2);
+    EXPECT_EQ(sub.get(1), 3);
+    EXPECT_EQ(sub.get(2), 4);
+    EXPECT_EQ(sub.get(3), 5);
+}
+
+TEST(PublicMethodsTest, SubRarrayFullRange) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    auto sub = arr.sub_rarray(0, 5);
+
+    ASSERT_EQ(sub.length(), 5u);
+    for (size_t i = 0; i < 5; ++i) {
+        EXPECT_EQ(sub.get(i), arr.get(i));
+    }
+}
+
+TEST(PublicMethodsTest, SubRarrayEmptyRange) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    auto sub = arr.sub_rarray(3, 3);
+
+    EXPECT_EQ(sub.length(), 0u);
+}
+
+TEST(PublicMethodsTest, SubRarrayInvalidRangeThrows) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    EXPECT_THROW(arr.sub_rarray(4, 10), std::out_of_range);
+    EXPECT_THROW(arr.sub_rarray(6, 2), std::out_of_range);
+}
+
+TEST(PublicMethodsTest, SubRarrayDoesNotAffectOriginal) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    auto sub = arr.sub_rarray(1, 4);
+
+    sub.set(0, 999);
+
+    EXPECT_EQ(arr.get(1), 1) << "Original array must remain unchanged";
+}
