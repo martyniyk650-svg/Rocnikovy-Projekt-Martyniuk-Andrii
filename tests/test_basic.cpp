@@ -815,3 +815,190 @@ TEST(PublicMethodsTest, SubRarrayDoesNotAffectOriginal) {
 
     EXPECT_EQ(arr.get(1), 1) << "Original array must remain unchanged";
 }
+
+// =======================================================================
+//  ITERATORS
+// =======================================================================
+
+TEST(IteratorTest, RangeBasedForWorks) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    int expected = 0;
+    for (auto x : arr) {
+        EXPECT_EQ(x, expected++);
+    }
+}
+
+TEST(IteratorTest, ManualIterationWorks) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i * 10);
+
+    size_t index = 0;
+    for (auto it = arr.begin(); it != arr.end(); ++it) {
+        EXPECT_EQ(*it, static_cast<int>(index * 10));
+        ++index;
+    }
+
+    EXPECT_EQ(index, arr.length());
+}
+
+TEST(IteratorTest, IteratorAllowsModification) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    for (auto it = arr.begin(); it != arr.end(); ++it) {
+        *it *= 2;
+    }
+
+    for (size_t i = 0; i < arr.length(); ++i) {
+        EXPECT_EQ(arr.get(i), static_cast<int>(i * 2));
+    }
+}
+
+TEST(IteratorTest, ConstIteratorWorks) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    const TestArray& constArr = arr;
+
+    int expected = 0;
+    for (auto it = constArr.begin(); it != constArr.end(); ++it) {
+        EXPECT_EQ(*it, expected++);
+    }
+}
+
+TEST(IteratorTest, EmptyArrayIteration) {
+    TestArray arr;
+
+    size_t count = 0;
+    for (auto it = arr.begin(); it != arr.end(); ++it) {
+        ++count;
+    }
+
+    EXPECT_EQ(count, 0u);
+}
+
+TEST(IteratorTest, BeginEqualsEndForEmpty) {
+    TestArray arr;
+
+    EXPECT_TRUE(arr.begin() != arr.end() == false);
+}
+
+TEST(IteratorTest, IteratorCoversAllElements) {
+    TestArray arr;
+    for (int i = 0; i < 100; ++i) arr.push_back(i);
+
+    size_t count = 0;
+    for (auto it = arr.begin(); it != arr.end(); ++it) {
+        EXPECT_EQ(*it, static_cast<int>(count));
+        ++count;
+    }
+
+    EXPECT_EQ(count, 100u);
+}
+
+TEST(IteratorTest, IteratorAfterModifications) {
+    TestArray arr;
+    for (int i = 0; i < 10; ++i) arr.push_back(i);
+
+    for (int i = 0; i < 5; ++i) arr.shrink();
+    for (int i = 10; i < 15; ++i) arr.push_back(i);
+
+    int expected[] = {0,1,2,3,4,10,11,12,13,14};
+
+    size_t i = 0;
+    for (auto x : arr) {
+        EXPECT_EQ(x, expected[i++]);
+    }
+
+    EXPECT_EQ(i, arr.length());
+}
+
+// =======================================================================
+//  filter()
+// =======================================================================
+
+TEST(FilterTest, BasicFilteringWorks) {
+    TestArray arr;
+    for (int i = 0; i < 6; ++i) arr.push_back(i);
+
+    auto result = arr.filter([](int x) {
+        return x % 2 == 0;
+    });
+
+    ASSERT_EQ(result.length(), 3u);
+    EXPECT_EQ(result.get(0), 0);
+    EXPECT_EQ(result.get(1), 2);
+    EXPECT_EQ(result.get(2), 4);
+}
+
+TEST(FilterTest, EmptyResult) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    auto result = arr.filter([](int x) {
+        return x > 100;
+    });
+
+    EXPECT_TRUE(result.empty());
+}
+
+TEST(FilterTest, OriginalArrayUnchanged) {
+    TestArray arr;
+    for (int i = 0; i < 5; ++i) arr.push_back(i);
+
+    auto result = arr.filter([](int x) {
+        return x < 3;
+    });
+
+    ASSERT_EQ(arr.length(), 5u);
+    for (size_t i = 0; i < arr.length(); ++i) {
+        EXPECT_EQ(arr.get(i), static_cast<int>(i));
+    }
+
+    ASSERT_EQ(result.length(), 3u);
+    EXPECT_EQ(result.get(0), 0);
+    EXPECT_EQ(result.get(1), 1);
+    EXPECT_EQ(result.get(2), 2);
+}
+
+// =======================================================================
+//  flatten()
+// =======================================================================
+
+TEST(FlattenTest, WorksWithVector) {
+    ResizableArray<std::vector<int>> arr;
+
+    arr.push_back({1, 2});
+    arr.push_back({3, 4});
+
+    auto flat = arr.flatten<int>();
+
+    ASSERT_EQ(flat.length(), 4u);
+    EXPECT_EQ(flat.get(0), 1);
+    EXPECT_EQ(flat.get(1), 2);
+    EXPECT_EQ(flat.get(2), 3);
+    EXPECT_EQ(flat.get(3), 4);
+}
+
+TEST(FlattenTest, WorksWithResizableArray) {
+    ResizableArray<ResizableArray<int>> arr;
+
+    ResizableArray<int> a;
+    a.push_back(5);
+    a.push_back(6);
+
+    ResizableArray<int> b;
+    b.push_back(7);
+
+    arr.push_back(a);
+    arr.push_back(b);
+
+    auto flat = arr.flatten<int>();
+
+    ASSERT_EQ(flat.length(), 3u);
+    EXPECT_EQ(flat.get(0), 5);
+    EXPECT_EQ(flat.get(1), 6);
+    EXPECT_EQ(flat.get(2), 7);
+}
