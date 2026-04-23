@@ -607,3 +607,35 @@ ResizableArray<T, R> ResizableArray<T, R>::sub_rarray(size_t from, size_t to) co
 
     return result;
 }
+
+template<typename T, size_t R>
+template<typename Predicate>
+ResizableArray<T, R> ResizableArray<T, R>::filter(Predicate pred) const {
+    ResizableArray<T, R> result;
+
+    for (size_t i = 0; i < N_; ++i) {
+        const T& val = get(i);
+        if (pred(val)) {
+            result.push_back(val);
+        }
+    }
+
+    return result;
+}
+
+template<typename T, size_t R>
+template<typename U>
+ResizableArray<U, R> ResizableArray<T, R>::flatten() const {
+
+    ResizableArray<U, R> result;
+
+    for (size_t i = 0; i < N_; ++i) {
+        const auto& inner = get(i);
+
+        for (const auto& x : inner) {
+            result.push_back(x);
+        }
+    }
+
+    return result;
+}

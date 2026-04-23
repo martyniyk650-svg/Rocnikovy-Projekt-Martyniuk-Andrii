@@ -84,6 +84,12 @@ public:
 
     ResizableArray sub_rarray(size_t from, size_t to) const;
 
+    template<typename Predicate>
+    ResizableArray<T, R> filter(Predicate pred) const;
+
+    template<typename U>
+    ResizableArray<U, R> flatten() const;
+
     // ==================== UŽITOČNÉ INFO ====================
 
     // Koľko prvkov je v poli
@@ -101,6 +107,73 @@ public:
     // arr[5] = 10; - funguje rovnako, ako get/set
     T& operator[](size_t index) { return get(index); }
     const T& operator[](size_t index) const { return get(index); }
+
+    // ==================== ITERÁTORY ====================
+
+    class Iterator {
+    public:
+        Iterator(ResizableArray* arr, size_t index)
+            : arr_(arr), index_(index) {}
+
+        T& operator*() {
+            return arr_->get(index_);
+        }
+
+        Iterator& operator++() {
+            ++index_;
+            return *this;
+        }
+
+        bool operator!=(const Iterator& other) const {
+            return index_ != other.index_;
+        }
+
+    private:
+        ResizableArray* arr_;
+        size_t index_;
+    };
+
+    class ConstIterator {
+    public:
+        ConstIterator(const ResizableArray* arr, size_t index)
+            : arr_(arr), index_(index) {}
+
+        const T& operator*() const {
+            return arr_->get(index_);
+        }
+
+        ConstIterator& operator++() {
+            ++index_;
+            return *this;
+        }
+
+        bool operator!=(const ConstIterator& other) const {
+            return index_ != other.index_;
+        }
+
+    private:
+        const ResizableArray* arr_;
+        size_t index_;
+    };
+
+    // begin / end
+    Iterator begin() {
+        return Iterator(this, 0);
+    }
+
+    Iterator end() {
+        return Iterator(this, N_);
+    }
+
+    ConstIterator begin() const {
+        return ConstIterator(this, 0);
+    }
+
+    ConstIterator end() const {
+        return ConstIterator(this, N_);
+    }
+
+
 
 //private:
     // ==================== VNÚTORNÉ ŠTRUKTÚRY ====================
@@ -222,4 +295,5 @@ public:
     // Keď pole rastie, B sa zdvojnásobuje
     static constexpr size_t INITIAL_B = 4;
 };
+#include "rarray_impl.tpp"
 #endif // PROJEKT_RARRAY_H
