@@ -2,8 +2,10 @@
 #include <stdexcept>
 #include <new>
 #include <utility>
+#include <algorithm>
 
 #include "rarray.h"
+
 
 // ===================== DataBlock =====================
 //
@@ -11,6 +13,7 @@
 // V triede ResizableArray sú tieto bloky používané na uloženie dát
 // rôznych veľkostí: B, B^2, B^3, ...
 //
+
 template<typename T, size_t R>
 ResizableArray<T, R>::DataBlock::DataBlock(size_t cap)
     : data(cap ? new T[cap] : nullptr), capacity(cap) {}
@@ -42,12 +45,14 @@ ResizableArray<T, R>::DataBlock::operator=(DataBlock&& other) noexcept {
     return *this;
 }
 
+
 // ===================== DynamicArray =====================
 //
 // Vlastná implementácia dynamického poľa ukazovateľov na bloky.
 // Funguje podobne ako std::vector, ale nepoužíva STL.
 // Používa sa v ResizableArray na uloženie blokov každej úrovne.
 //
+
 template<typename T, size_t R>
 template<typename BlockType>
 ResizableArray<T, R>::DynamicArray<BlockType>::DynamicArray()
@@ -148,8 +153,9 @@ BlockType*& ResizableArray<T, R>::DynamicArray<BlockType>::at(size_t index) {
 
 
 // ===============================================
-// ResizableArray – constructor
+// ResizableArray
 // ===============================================
+
 template<typename T, size_t R>
 ResizableArray<T, R>::ResizableArray()
     : N_(0), B_(INITIAL_B), levels_(nullptr), n_(nullptr), n0_(0)
@@ -157,9 +163,6 @@ ResizableArray<T, R>::ResizableArray()
     initializeLevels();
 }
 
-// ===============================================
-// ResizableArray – destructor
-// ===============================================
 template<typename T, size_t R>
 ResizableArray<T, R>::~ResizableArray() {
     cleanupLevels();
@@ -411,9 +414,6 @@ void ResizableArray<T, R>::copyFrom(const ResizableArray& other) {
 }
 
 
-
-
-
 // ==================== PUBLIC METHODS (FULL IMPLEMENTATION) ====================
 
 template<typename T, size_t R>
@@ -434,7 +434,6 @@ ResizableArray<T, R>::ResizableArray(ResizableArray&& other) noexcept
     other.N_      = 0;
     other.n0_     = 0;
 }
-
 
 template<typename T, size_t R>
 ResizableArray<T, R>& ResizableArray<T, R>::operator=(const ResizableArray& other) {
@@ -592,7 +591,9 @@ void ResizableArray<T, R>::set(size_t index, const T& item) {
     get(index) = item;
 }
 
+
 // ==================== INE OPERÁCIE ====================
+
 template<typename T, size_t R>
 ResizableArray<T, R> ResizableArray<T, R>::sub_rarray(size_t from, size_t to) const {
     if (from > to || to > N_) {
@@ -638,4 +639,168 @@ ResizableArray<U, R> ResizableArray<T, R>::flatten() const {
     }
 
     return result;
+}
+
+
+template<typename T, size_t R>
+void ResizableArray<T, R>::sort() {
+    // Ak pole obsahuje menej ako 2 prvky, je už z definície zoradené.
+    if (N_ <= 1) return;
+
+    /**
+     * @brief Bezpečný lokátor fyzickej adresy prvku na základe globálneho sekvenčného indexu.
+     * @param index Globálny index prvku v rozsahu [0, N_ - 1].
+     * @return T* Ukazovateľ na reálnu pamäťovú bunku v konkrétnom DataBlocku.
+     */
+    auto const get_element_ptr = [this](size_t index) -> T* {
+        size_t x = index;
+
+        // Prechádzame vyššie úrovne (od R-1 až po úroveň 2) smerom nadol
+        for (size_t lvl = R - 1; lvl >= 2; --lvl) {
+            size_t blockSize = this->power(this->B_, lvl); // Kapacita jedného bloku na danej úrovni
+            size_t levelItems = this->n_[lvl] * blockSize; // Celkový počet prvkov na tejto úrovni
+
+            if (x < levelItems) {
+                size_t b = x / blockSize;  // Index bloku na aktuálnej úrovni
+                size_t off = x % blockSize; // Odsadenie (offset) vo vnútri bloku
+                return &(this->levels_[lvl].at(b)->data[off]);
+            }
+            x -= levelItems; // Posun na zostávajúce prvky, ak hľadaný index leží nižšie
+        }
+
+        // Spracovanie špecifickej úrovne 1 (ktorá môže mať posledný blok neúplný)
+        size_t fullPart = (this->n_[1] > 0 ? (this->n_[1] - 1) * this->B_ : 0);
+        if (x < fullPart) {
+            size_t b = x / this->B_;  // Index plného bloku na úrovni 1
+            size_t off = x % this->B_; // Odsadenie v plnom bloku
+            return &(this->levels_[1].at(b)->data[off]);
+        } else {
+            x -= fullPart; // Zostávajúci index ukazuje do posledného (čiastočne zaplneného) bloku
+            return &(this->levels_[1].at(this->n_[1] - 1)->data[x]);
+        }
+    };
+
+    // =========================================================================
+    // KROK 1: Lokálne in-place zoradenie každého fyzického DataBlocku zvlášť
+    // =========================================================================
+
+    // Triedenie plných blokov na úrovniach R-1 až 2
+    for (size_t lvl = R - 1; lvl >= 2; --lvl) {
+        size_t blockSize = power(B_, lvl);
+        for (size_t b = 0; b < n_[lvl]; ++b) {
+            // Dáta v bloku ležia súvisle, môžeme použiť superrýchly std::sort
+            std::sort(levels_[lvl].at(b)->data, levels_[lvl].at(b)->data + blockSize);
+        }
+    }
+
+    // Triedenie na úrovni 1 (oddelene spracujeme plné bloky a posledný neúplný)
+    if (n_[1] > 0) {
+        // Zoradenie všetkých kompletne zaplnených blokov
+        for (size_t b = 0; b < n_[1] - 1; ++b) {
+            std::sort(levels_[1].at(b)->data, levels_[1].at(b)->data + B_);
+        }
+        // Zoradenie posledného bloku, ktorý obsahuje iba n0_ reálnych prvkov
+        std::sort(levels_[1].at(n_[1] - 1)->data, levels_[1].at(n_[1] - 1)->data + n0_);
+    }
+
+    // =========================================================================
+    // KROK 2: Projekcia fyzických blokov na virtuálnu lineárnu os (pásku)
+    // =========================================================================
+    struct BlockRange {
+        size_t start; // Globálny počiatočný index bloku v ResizableArray
+        size_t len;   // Počet platných prvkov v tomto bloku
+    };
+
+    std::vector<BlockRange> blocks; // Pamäťová náročnosť vektora je O(log N), čo je zanedbateľné
+    size_t current_start = 0;
+
+    // Mapujeme rozsahy blokov od najvyšších úrovní po najnižšie
+    for (size_t lvl = R - 1; lvl >= 2; --lvl) {
+        size_t blockSize = power(B_, lvl);
+        for (size_t b = 0; b < n_[lvl]; ++b) {
+            blocks.push_back(BlockRange{current_start, blockSize});
+            current_start += blockSize;
+        }
+    }
+
+    // Mapujeme plné bloky na úrovni 1
+    if (n_[1] > 0) {
+        for (size_t b = 0; b < n_[1] - 1; ++b) {
+            blocks.push_back(BlockRange{current_start, B_});
+            current_start += B_;
+        }
+        // Mapujeme finálny neúplný blok (ak obsahuje nejaké prvky)
+        if (n0_ > 0) {
+            blocks.push_back(BlockRange{current_start, n0_});
+            current_start += n0_;
+        }
+    }
+
+    // =========================================================================
+    // POMOCNÁ FUNKCIA: Čistokrvné in-place zlúčenie dvoch lineárnych rozsahov
+    // =========================================================================
+    auto const merge_two_flat_ranges = [&](size_t start1, size_t len1, size_t start2, size_t len2) {
+        size_t i = 0; // Ukazovateľ (offset) v prvom podreťazci
+
+        while (i < len1) {
+            T* p_i = get_element_ptr(start1 + i);   // Aktuálny prvok v ľavej časti
+            T* p_j0 = get_element_ptr(start2);      // Prvý (najmenší) prvok v pravej časti
+
+            if (*p_i <= *p_j0) {
+                // Prvok je na správnom mieste, posúvame sa ďalej
+                i++;
+            } else {
+                // Prvok v pravej časti je menší! Musíme ho vložiť pred p_i.
+                T val = std::move(*p_j0); // Vytiahneme menšiu hodnotu
+
+                // Dočasne uchováme posledný prvok prvej časti, ktorý bude vytlačený rotáciou
+                T pushed_out = std::move(*get_element_ptr(start1 + len1 - 1));
+
+                // In-place posun (rotácia) celej prvej oblasti o 1 index doprava
+                for (size_t k = len1 - 1; k > i; --k) {
+                    *get_element_ptr(start1 + k) = std::move(*get_element_ptr(start1 + k - 1));
+                }
+                // Vložíme menší prvok na uvoľnené miesto indexu `i`
+                *get_element_ptr(start1 + i) = std::move(val);
+
+                // Hľadanie správnej pozície pre vytlačený prvok `pushed_out` v druhom rozsahu
+                // Druhý rozsah musí zostať stále zoradený.
+                size_t k = 1;
+                while (k < len2 && *get_element_ptr(start2 + k) < pushed_out) {
+                    // Posúvame prvky druhého bloku doľava, dokiaľ nenájdeme miesto pre `pushed_out`
+                    *get_element_ptr(start2 + k - 1) = std::move(*get_element_ptr(start2 + k));
+                    k++;
+                }
+                // Uložíme vytlačený prvok na jeho novú korektnú pozíciu v druhom bloku
+                *get_element_ptr(start2 + k - 1) = std::move(pushed_out);
+
+                i++; // Korekcia indexu po úspešnej rotácii
+            }
+        }
+    };
+
+    // =========================================================================
+    // KROK 3: Hierarchický Bottom-up Merge (Iteratívne spájanie odspodu nahor)
+    // =========================================================================
+
+    // Cyklus beží, kým sa všetky čiastočné bloky nespoja do jedného monolitického celku
+    while (blocks.size() > 1) {
+        std::vector<BlockRange> next_blocks; // Zoznam blokov pre nasledujúcu iteráciu spájania
+
+        // Spájame bloky po dvojiciach (susedné dvojice)
+        for (size_t i = 0; i < blocks.size(); i += 2) {
+            if (i + 1 < blocks.size()) {
+                // Máme kompletnú dvojicu susedných blokov -> zlúčime ich
+                merge_two_flat_ranges(blocks[i].start, blocks[i].len, blocks[i+1].start, blocks[i+1].len);
+
+                // Do novej vrstvy zapíšeme spojený blok s akumulovanou dĺžkou
+                next_blocks.push_back(BlockRange{blocks[i].start, blocks[i].len + blocks[i+1].len});
+            } else {
+                // Nepárny blok nemá dvojicu, prechádza bez zmeny do ďalšej úrovne spájania
+                next_blocks.push_back(blocks[i]);
+            }
+        }
+        // Nahradíme starú vrstvu blokov novou, väčšou vrstvou (využijeme move pre rýchlosť)
+        blocks = std::move(next_blocks);
+    }
 }
