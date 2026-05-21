@@ -1002,3 +1002,92 @@ TEST(FlattenTest, WorksWithResizableArray) {
     EXPECT_EQ(flat.get(1), 6);
     EXPECT_EQ(flat.get(2), 7);
 }
+
+// =======================================================================
+//  sort()
+// =======================================================================
+
+TEST(SortTest, SmallArray) {
+    ResizableArray<int, 3> arr;
+    arr.push_back(30);
+    arr.push_back(10);
+    arr.push_back(20);
+
+    arr.sort();
+
+    ASSERT_EQ(arr.length(), 3u);
+    EXPECT_EQ(arr.get(0), 10);
+    EXPECT_EQ(arr.get(1), 20);
+    EXPECT_EQ(arr.get(2), 30);
+}
+
+TEST(SortTest, EmptyAndSingleElement) {
+    ResizableArray<int, 3> empty_arr;
+    EXPECT_NO_THROW(empty_arr.sort());
+
+    ResizableArray<int, 3> single_arr;
+    single_arr.push_back(42);
+    single_arr.sort();
+    EXPECT_EQ(single_arr.get(0), 42);
+}
+
+TEST(SortTest, MultipleLevelsMerge) {
+    ResizableArray<int, 3> arr;
+    // Vložíme zostupne idúcu postupnosť
+    for (int i = 50; i > 0; --i) {
+        arr.push_back(i);
+    }
+
+    arr.sort();
+
+    ASSERT_EQ(arr.length(), 50u);
+    for (size_t i = 0; i < arr.length(); ++i) {
+        EXPECT_EQ(arr.get(i), static_cast<int>(i + 1));
+    }
+}
+
+TEST(SortTest, AlreadySorted) {
+    ResizableArray<int, 3> arr;
+    for (int i = 0; i < 20; ++i) arr.push_back(i);
+
+    arr.sort();
+
+    for (size_t i = 0; i < 20; ++i) {
+        EXPECT_EQ(arr.get(i), static_cast<int>(i));
+    }
+}
+
+TEST(SortTest, DuplicateValues) {
+    ResizableArray<int, 3> arr;
+    arr.push_back(5);
+    arr.push_back(1);
+    arr.push_back(5);
+    arr.push_back(2);
+    arr.push_back(1);
+
+    arr.sort();
+
+    EXPECT_EQ(arr.get(0), 1);
+    EXPECT_EQ(arr.get(1), 1);
+    EXPECT_EQ(arr.get(2), 2);
+    EXPECT_EQ(arr.get(3), 5);
+    EXPECT_EQ(arr.get(4), 5);
+}
+
+TEST(SortTest, RandomLargeArray) {
+    ResizableArray<int, 3> arr;
+    std::vector<int> std_vec;
+
+    for (int i = 0; i < 200; ++i) {
+        int val = std::rand() % 1000;
+        arr.push_back(val);
+        std_vec.push_back(val);
+    }
+
+    arr.sort();
+    std::sort(std_vec.begin(), std_vec.end());
+
+    for (size_t i = 0; i < 200; ++i) {
+        EXPECT_EQ(arr.get(i), std_vec[i]);
+    }
+}
